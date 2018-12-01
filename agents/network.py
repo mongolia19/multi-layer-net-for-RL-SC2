@@ -136,15 +136,47 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   mot_mask[:11] = 1
   mot_mask[330:350] = 1
   motion_action_mask = tf.multiply(motion_action, mot_mask)
-  merged_attack_motion = tf.add(layers.flatten(attack_action_mask), layers.flatten(motion_action_mask))
-  non_spatial_action = layers.fully_connected(merged_attack_motion,
-                                              num_outputs=num_action,
+
+  policy_router = layers.fully_connected(feat_fc,
+                                              num_outputs=2,
                                               activation_fn=tf.nn.softmax,
-                                              scope='non_spatial_action')
-  # non_spatial_action = layers.fully_connected(feat_fc,
-  #                                             num_outputs=num_action,
-  #                                             activation_fn=tf.nn.softmax,
-  #                                             scope='non_spatial_action')
+                                              scope='policy_router')
+  a = tf.reshape(tf.convert_to_tensor([1, 0]), [1,2])
+  b = tf.convert_to_tensor([0, 1])
+  left = tf.boolean_mask(policy_router, np.array([True, False]), axis=1)
+  right = tf.boolean_mask(policy_router, np.array([False, True]), axis=1)
+  left = tf.reduce_sum(left)
+  right = tf.reduce_sum(right)
+  # merged_attack_motion = layers.flatten(attack_action_mask)
+  masked_attack_vector = tf.multiply(attack_action_mask, left)
+  masked_motion_vector = tf.multiply(motion_action_mask, right)
+
+  # merged_attack_motion = layers.flatten(motion_action_mask)
+  merged_attack_motion = tf.add(masked_motion_vector, masked_attack_vector)
+  # c = tf.equal(b, tf.cast(policy_shape, tf.int32))
+  def conditon_tf(condition_tensor_1, condition_tensor_2 ,tensor_a, tensor_b):
+      tile_tensor_a = tf.py_func(_condition_tf, [condition_tensor_1, condition_tensor_2, tensor_a, tensor_b], tf.float32)
+      return tile_tensor_a
+
+  def _condition_tf(a, b, c, d):
+      if a == b:
+          return c
+      else:
+          return d
+
+  def f1():return layers.flatten(attack_action_mask)
+  def f2():return layers.flatten(motion_action_mask)
+
+  # merged_attack_motion = tf.cond(c, f1, f2)
+  # merged_attack_motion = conditon_tf(policy_router, b, layers.flatten(attack_action_mask), layers.flatten(motion_action_mask))
+  # if policy_router[0]>0:
+  #     merged_attack_motion = layers.flatten(attack_action_mask)
+  # else:
+  #     merged_attack_motion = layers.flatten(motion_action_mask)
+  non_spatial_action = layers.fully_connected(merged_attack_motion,
+                                                  num_outputs=num_action,
+                                                  activation_fn=tf.nn.softmax,
+                                                  scope='non_spatial_action')
   value = tf.reshape(layers.fully_connected(feat_fc,
                                             num_outputs=1,
                                             activation_fn=None,
