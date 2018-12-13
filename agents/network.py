@@ -5,6 +5,8 @@ from __future__ import print_function
 import tensorflow as tf
 import tensorflow.contrib.layers as layers
 import numpy as np
+from pysc2.lib import features
+
 
 def build_net(minimap, screen, info, msize, ssize, num_action, ntype):
   if ntype == 'atari':
@@ -43,7 +45,7 @@ def build_atari(minimap, screen, info, msize, ssize, num_action):
                                    scope='info_fc')
 
   # Compute spatial actions, non spatial actions and value
-  feat_fc = tf.concat([layers.flatten(mconv2), layers.flatten(sconv2), info_fc], axis=1)
+  feat_fc = tf.concat([layers.flatten(mconv2), layers.flatten(sconv2), info_fc, mconv1], axis=1)
   feat_fc = layers.fully_connected(feat_fc,
                                    num_outputs=256,
                                    activation_fn=tf.nn.relu,
@@ -77,16 +79,16 @@ def build_atari(minimap, screen, info, msize, ssize, num_action):
 
 def build_fcn(minimap, screen, info, msize, ssize, num_action):
   # Extract features
-  mconv1 = layers.conv2d(tf.transpose(minimap, [0, 2, 3, 1]),
+  # player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
+  mconv1 = layers.fully_connected(layers.flatten(minimap),
                          num_outputs=16,
-                         kernel_size=5,
-                         stride=1,
-                         scope='mconv1')
-  mconv2 = layers.conv2d(mconv1,
-                         num_outputs=32,
-                         kernel_size=3,
-                         stride=1,
-                         scope='mconv2')
+                         scope='mconv1', activation_fn=tf.nn.relu)
+  # mconv2 = layers.conv2d(mconv1,
+  #                        num_outputs=32,
+  #                        kernel_size=3,
+  #                        stride=1,
+  #                        scope='mconv2')
+  mconv2 = mconv1
   sconv1 = layers.conv2d(tf.transpose(screen, [0, 2, 3, 1]),
                          num_outputs=16,
                          kernel_size=5,
@@ -103,7 +105,9 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                    scope='info_fc')
 
   # Compute spatial actions
-  feat_conv = tf.concat([mconv2, sconv2], axis=3)
+  # feat_conv = tf.concat([mconv2, sconv2], axis=3)
+  # feat_conv = tf.concat([layers.flatten(mconv2), layers.flatten(sconv2)], axis=1)
+  feat_conv = sconv2
   spatial_action = layers.conv2d(feat_conv,
                                  num_outputs=1,
                                  kernel_size=1,

@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
+import math
 import numpy as np
 import tensorflow as tf
 from pysc2.lib import actions
@@ -11,6 +11,103 @@ from pysc2.lib import features
 from agents.network import build_net
 import utils as U
 
+_PLAYER_FRIENDLY = 1
+_PLAYER_NEUTRAL = 3  # beacon/minerals
+_PLAYER_HOSTILE = 4
+_NO_OP = actions.FUNCTIONS.no_op.id
+_MOVE_SCREEN = actions.FUNCTIONS.Move_screen.id
+_ATTACK_SCREEN = actions.FUNCTIONS.Attack_screen.id
+_SELECT_ARMY = actions.FUNCTIONS.select_army.id
+_NOT_QUEUED = [0]
+_SELECT_ALL = [0]
+
+
+def calulate_phase(self_x, self_y, enemy_x, enemy_y):
+    vector = np.zeros(8)
+    phase_dim = -1
+    delta_x = float(enemy_x-self_x)
+    delta_y = float(enemy_y-self_y)
+
+    if math.fabs(delta_x) <0.01 and delta_y<0:
+      phase_dim = 6
+    elif math.fabs(delta_x) <0.01 and delta_y>0:
+      phase_dim = 2
+    else:
+      tan = delta_y/delta_x
+      theta = math.atan(tan)
+      if 0<=theta<(math.pi/6) or (math.pi*11/6)<=theta<math.pi*2:
+        phase_dim = 0
+      elif (math.pi/6)<=theta<(math.pi/3):
+        phase_dim = 1
+      elif (math.pi/3)<=theta<(math.pi/3+math.pi/6):
+        phase_dim = 2
+      elif (math.pi/3+math.pi/6)<=theta<(math.pi/3+math.pi/3):
+        phase_dim = 3
+      elif (math.pi*2/3)<=theta<(math.pi*2/3+math.pi/6):
+        phase_dim = 4
+      elif (math.pi*2/3+math.pi/6)<=theta<(math.pi*2/3+math.pi/3):
+        phase_dim = 5
+      elif (math.pi*2/3+math.pi/3)<=theta<(math.pi*2/3+math.pi/3+math.pi/6):
+        phase_dim = 6
+      elif (math.pi*4/3)<=theta<=(math.pi*4/3+math.pi/6):
+        phase_dim = 7
+    if phase_dim ==-1:
+      return vector
+    else:
+      vector[phase_dim] = 1
+      return vector
+
+
+def calulate_distance_in_phase(self_x, self_y, enemy_x, enemy_y):
+  vector = np.zeros(8)
+  phase_dim = -1
+  delta_x = float(enemy_x - self_x)
+  delta_y = float(enemy_y - self_y)
+  distance = math.sqrt(delta_x**2 + delta_y**2)
+  if math.fabs(delta_x) < 0.01 and delta_y < 0:
+    phase_dim = 6
+  elif math.fabs(delta_x) < 0.01 and delta_y > 0:
+    phase_dim = 2
+  else:
+    tan = delta_y / delta_x
+    theta = math.atan(tan)
+    if 0 <= theta < (math.pi / 6) or (math.pi * 11 / 6) <= theta < math.pi * 2:
+      phase_dim = 0
+    elif (math.pi / 6) <= theta < (math.pi / 3):
+      phase_dim = 1
+    elif (math.pi / 3) <= theta < (math.pi / 3 + math.pi / 6):
+      phase_dim = 2
+    elif (math.pi / 3 + math.pi / 6) <= theta < (math.pi / 3 + math.pi / 3):
+      phase_dim = 3
+    elif (math.pi * 2 / 3) <= theta < (math.pi * 2 / 3 + math.pi / 6):
+      phase_dim = 4
+    elif (math.pi * 2 / 3 + math.pi / 6) <= theta < (math.pi * 2 / 3 + math.pi / 3):
+      phase_dim = 5
+    elif (math.pi * 2 / 3 + math.pi / 3) <= theta < (math.pi * 2 / 3 + math.pi / 3 + math.pi / 6):
+      phase_dim = 6
+    elif (math.pi * 4 / 3) <= theta <= (math.pi * 4 / 3 + math.pi / 6):
+      phase_dim = 7
+  if phase_dim == -1:
+    return vector
+  else:
+    vector[phase_dim] = distance
+    return vector
+
+
+def calulate_enemy_num_distribution(self_x, self_y, enemy_x_list, enemy_y_list):
+  total_vector = np.zeros(8)
+  for index, one in enumerate (enemy_x_list):
+    vec_tmp = calulate_phase(self_x, self_y, one, enemy_y_list[index])
+    total_vector += vec_tmp
+  return total_vector
+
+
+def calulate_enemy_distance_distribution(self_x, self_y, enemy_x_list, enemy_y_list):
+  total_vector = np.zeros(8)
+  for index, one in enumerate(enemy_x_list):
+    vec_tmp = calulate_distance_in_phase(self_x, self_y, one, enemy_y_list[index])
+    total_vector += vec_tmp
+  return total_vector
 
 class A3CAgent(object):
   """An agent specifically for solving the mini-game maps."""
@@ -23,6 +120,7 @@ class A3CAgent(object):
     self.msize = msize
     self.ssize = ssize
     self.isize = len(actions.FUNCTIONS)
+    self.agent_num = 0
 
 
   def setup(self, sess, summary_writer):
@@ -47,7 +145,8 @@ class A3CAgent(object):
         assert tf.get_variable_scope().reuse
 
       # Set inputs of networks
-      self.minimap = tf.placeholder(tf.float32, [None, U.minimap_channel(), self.msize, self.msize], name='minimap')
+      # self.minimap = tf.placeholder(tf.float32, [None, U.minimap_channel(), self.msize, self.msize], name='minimap')
+      self.minimap = tf.placeholder(tf.float32, [None, U.hand_crafted_feature_num()], name='minimap')
       self.screen = tf.placeholder(tf.float32, [None, U.screen_channel(), self.ssize, self.ssize], name='screen')
       self.info = tf.placeholder(tf.float32, [None, self.isize], name='info')
 
@@ -101,9 +200,62 @@ class A3CAgent(object):
       self.saver = tf.train.Saver(max_to_keep=100)
 
 
+  def get_hand_crafted_feature(self, obs):
+    _PLAYER_HIT = features.SCREEN_FEATURES.unit_hit_points_ratio.index
+    player_hit_points = obs.observation["screen"][_PLAYER_HIT]
+    _PLAYER_RELATIVE = features.SCREEN_FEATURES.player_relative.index
+    player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
+    enemy_y, enemy_x = (player_relative == _PLAYER_HOSTILE).nonzero()
+    friend_y, friend_x = (player_relative == _PLAYER_FRIENDLY).nonzero()
+    if len(friend_x) != len(friend_y):
+      print("friend_x num != friend_y num")
+
+    if self.agent_num >= len(friend_y) -1:
+      self.agent_num = 0
+    else:
+      self.agent_num = self.agent_num + 1
+    current_agent = self.agent_num
+    vector_enemy_num_8_dim = calulate_enemy_num_distribution(friend_x[current_agent], friend_y[current_agent], enemy_x,
+                                                             enemy_y)
+    vector_enemy_dist_8_dim = calulate_enemy_distance_distribution(friend_x[current_agent], friend_y[current_agent],
+                                                                   enemy_x, enemy_y)
+    hit_points = player_hit_points[friend_y[current_agent]][friend_x[current_agent]]
+    hp = np.zeros(1)
+    hp[0] = hit_points
+    self_pos = np.zeros(2)
+    self_pos[0] = friend_x[current_agent]
+    self_pos[1] = friend_y[current_agent]
+    minimap = np.hstack((vector_enemy_num_8_dim, vector_enemy_dist_8_dim, hit_points, self_pos))
+    minimap = np.expand_dims(minimap, axis=0)
+    return minimap
+
+
   def step(self, obs):
-    minimap = np.array(obs.observation['minimap'], dtype=np.float32)
-    minimap = np.expand_dims(U.preprocess_minimap(minimap), axis=0)
+    # unit_hit_points_ratio
+    # _PLAYER_HIT = features.SCREEN_FEATURES.unit_hit_points_ratio.index
+    # player_hit_points = obs.observation["screen"][_PLAYER_HIT]
+    # _PLAYER_RELATIVE = features.SCREEN_FEATURES.player_relative.index
+    # player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
+    # enemy_y, enemy_x = (player_relative == _PLAYER_HOSTILE).nonzero()
+    # friend_y, friend_x = (player_relative == _PLAYER_FRIENDLY).nonzero()
+    # current_agent = self.agent_num
+    # if self.agent_num == len(friend_y) -1:
+    #   self.agent_num = 0
+    # else:
+    #   self.agent_num = self.agent_num + 1
+    # vector_enemy_num_8_dim = calulate_enemy_num_distribution(friend_x[current_agent], friend_y[current_agent], enemy_x, enemy_y)
+    # vector_enemy_dist_8_dim = calulate_enemy_distance_distribution(friend_x[current_agent], friend_y[current_agent], enemy_x, enemy_y)
+    # hit_points = player_hit_points[friend_y[current_agent]][friend_x[current_agent]]
+    # hp = np.zeros(1)
+    # hp[0] = hit_points
+    # self_pos = np.zeros(2)
+    # self_pos[0] = friend_x[current_agent]
+    # self_pos[1] = friend_y[current_agent]
+    # minimap = np.hstack((vector_enemy_num_8_dim, vector_enemy_dist_8_dim, hit_points, self_pos))
+    # minimap = np.array(obs.observation['minimap'], dtype=np.float32)
+    # minimap = np.expand_dims(U.preprocess_minimap(minimap), axis=0)
+    minimap = self.get_hand_crafted_feature(obs)
+    # minimap = np.expand_dims(minimap, axis=0)
     screen = np.array(obs.observation['screen'], dtype=np.float32)
     screen = np.expand_dims(U.preprocess_screen(screen), axis=0)
     # TODO: only use available actions
@@ -153,8 +305,9 @@ class A3CAgent(object):
     if obs.last():
       R = 0
     else:
-      minimap = np.array(obs.observation['minimap'], dtype=np.float32)
-      minimap = np.expand_dims(U.preprocess_minimap(minimap), axis=0)
+      # minimap = np.array(obs.observation['minimap'], dtype=np.float32)
+      # minimap = np.expand_dims(U.preprocess_minimap(minimap), axis=0)
+      minimap = self.get_hand_crafted_feature(obs)
       screen = np.array(obs.observation['screen'], dtype=np.float32)
       screen = np.expand_dims(U.preprocess_screen(screen), axis=0)
       info = np.zeros([1, self.isize], dtype=np.float32)
@@ -180,8 +333,9 @@ class A3CAgent(object):
 
     rbs.reverse()
     for i, [obs, action, next_obs] in enumerate(rbs):
-      minimap = np.array(obs.observation['minimap'], dtype=np.float32)
-      minimap = np.expand_dims(U.preprocess_minimap(minimap), axis=0)
+      # minimap = np.array(obs.observation['minimap'], dtype=np.float32)
+      # minimap = np.expand_dims(U.preprocess_minimap(minimap), axis=0)
+      minimap = self.get_hand_crafted_feature(obs)
       screen = np.array(obs.observation['screen'], dtype=np.float32)
       screen = np.expand_dims(U.preprocess_screen(screen), axis=0)
       info = np.zeros([1, self.isize], dtype=np.float32)

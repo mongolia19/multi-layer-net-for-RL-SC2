@@ -58,6 +58,9 @@ def minimap_channel():
   return c
 
 
+def hand_crafted_feature_num():
+  return 19
+
 def screen_channel():
   c = 0
   for i in range(len(features.SCREEN_FEATURES)):
