@@ -22,19 +22,59 @@ _NOT_QUEUED = [0]
 _SELECT_ALL = [0]
 
 
+def calulate_phase_simple(self_x,self_y, enemy_x,enemy_y):
+  vector = np.zeros(8)
+  phase_dim = -1
+  delta_x = float(enemy_x - self_x)
+  delta_y = float(enemy_y - self_y)
+
+  if math.fabs(delta_x) < 0.01 and delta_y <= 0:
+    phase_dim = 6
+  elif math.fabs(delta_x) < 0.01 and delta_y > 0:
+    phase_dim = 2
+  else:
+    tan = delta_y / delta_x
+    theta = math.atan(tan)
+    if delta_x>0 and delta_y>0 and delta_x>delta_y:
+      phase_dim = 0
+    if 0 <= theta < (math.pi / 6) or (math.pi * 11 / 6) <= theta < math.pi * 2:
+      phase_dim = 0
+    elif (math.pi / 6) <= theta < (math.pi / 3):
+      phase_dim = 1
+    elif (math.pi / 3) <= theta < (math.pi / 3 + math.pi / 6):
+      phase_dim = 2
+    elif (math.pi / 3 + math.pi / 6) <= theta < (math.pi / 3 + math.pi / 3):
+      phase_dim = 3
+    elif (math.pi * 2 / 3) <= theta < (math.pi * 2 / 3 + math.pi / 6):
+      phase_dim = 4
+    elif (math.pi * 2 / 3 + math.pi / 6) <= theta < (math.pi * 2 / 3 + math.pi / 3):
+      phase_dim = 5
+    elif (math.pi * 2 / 3 + math.pi / 3) <= theta < (math.pi * 2 / 3 + math.pi / 3 + math.pi / 6):
+      phase_dim = 6
+    elif (math.pi * 4 / 3) <= theta <= (math.pi * 4 / 3 + math.pi / 6):
+      phase_dim = 7
+  if phase_dim == -1:
+    return vector
+  else:
+    vector[phase_dim] = 1
+    return vector
+
+
 def calulate_phase(self_x, self_y, enemy_x, enemy_y):
     vector = np.zeros(8)
     phase_dim = -1
     delta_x = float(enemy_x-self_x)
     delta_y = float(enemy_y-self_y)
 
-    if math.fabs(delta_x) <0.01 and delta_y<0:
+    if math.fabs(delta_x) <0.01 and delta_y<=0:
       phase_dim = 6
     elif math.fabs(delta_x) <0.01 and delta_y>0:
       phase_dim = 2
     else:
       tan = delta_y/delta_x
       theta = math.atan(tan)
+      if theta<0:
+        theta += math.pi
       if 0<=theta<(math.pi/6) or (math.pi*11/6)<=theta<math.pi*2:
         phase_dim = 0
       elif (math.pi/6)<=theta<(math.pi/3):
@@ -58,6 +98,7 @@ def calulate_phase(self_x, self_y, enemy_x, enemy_y):
       return vector
 
 
+
 def calulate_distance_in_phase(self_x, self_y, enemy_x, enemy_y):
   vector = np.zeros(8)
   phase_dim = -1
@@ -71,6 +112,8 @@ def calulate_distance_in_phase(self_x, self_y, enemy_x, enemy_y):
   else:
     tan = delta_y / delta_x
     theta = math.atan(tan)
+    if theta < 0:
+      theta += math.pi
     if 0 <= theta < (math.pi / 6) or (math.pi * 11 / 6) <= theta < math.pi * 2:
       phase_dim = 0
     elif (math.pi / 6) <= theta < (math.pi / 3):
@@ -215,16 +258,27 @@ class A3CAgent(object):
     else:
       self.agent_num = self.agent_num + 1
     current_agent = self.agent_num
-    vector_enemy_num_8_dim = calulate_enemy_num_distribution(friend_x[current_agent], friend_y[current_agent], enemy_x,
+    if len(enemy_y)>0 and len(enemy_x)>0 and len(friend_x)>0 and len(friend_y)>0:
+      vector_enemy_num_8_dim = calulate_enemy_num_distribution(friend_x[current_agent], friend_y[current_agent], enemy_x,
                                                              enemy_y)
-    vector_enemy_dist_8_dim = calulate_enemy_distance_distribution(friend_x[current_agent], friend_y[current_agent],
+      vector_enemy_dist_8_dim = calulate_enemy_distance_distribution(friend_x[current_agent], friend_y[current_agent],
                                                                    enemy_x, enemy_y)
-    hit_points = player_hit_points[friend_y[current_agent]][friend_x[current_agent]]
+    else:
+      vector_enemy_num_8_dim = np.zeros(8)
+      vector_enemy_dist_8_dim = np.zeros(8)
+    if len(friend_x)>0 and len(friend_y)>0:
+      hit_points = player_hit_points[friend_y[current_agent]][friend_x[current_agent]]
+    else:
+      hit_points = 0
     hp = np.zeros(1)
     hp[0] = hit_points
     self_pos = np.zeros(2)
-    self_pos[0] = friend_x[current_agent]
-    self_pos[1] = friend_y[current_agent]
+    if len(friend_x)>0 and len(friend_y)>0:
+      self_pos[0] = friend_x[current_agent]
+      self_pos[1] = friend_y[current_agent]
+    else:
+      self_pos[0] = -1
+      self_pos[1] = -1
     minimap = np.hstack((vector_enemy_num_8_dim, vector_enemy_dist_8_dim, hit_points, self_pos))
     minimap = np.expand_dims(minimap, axis=0)
     return minimap
