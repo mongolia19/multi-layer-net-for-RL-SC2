@@ -59,7 +59,7 @@ def minimap_channel():
 
 
 def hand_crafted_feature_num():
-  return 19
+  return 19 + 8 + 8
 
 def screen_channel():
   c = 0

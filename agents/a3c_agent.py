@@ -33,30 +33,57 @@ def calulate_phase_simple(self_x,self_y, enemy_x,enemy_y):
   elif math.fabs(delta_x) < 0.01 and delta_y > 0:
     phase_dim = 2
   else:
-    tan = delta_y / delta_x
-    theta = math.atan(tan)
     if delta_x>0 and delta_y>0 and delta_x>delta_y:
       phase_dim = 0
-    if 0 <= theta < (math.pi / 6) or (math.pi * 11 / 6) <= theta < math.pi * 2:
-      phase_dim = 0
-    elif (math.pi / 6) <= theta < (math.pi / 3):
-      phase_dim = 1
-    elif (math.pi / 3) <= theta < (math.pi / 3 + math.pi / 6):
+    elif delta_x>0 and delta_y>0 and delta_x<=delta_y:
+      phase_dim =1
+    elif delta_x<0 and delta_y>0 and delta_x>delta_y:
       phase_dim = 2
-    elif (math.pi / 3 + math.pi / 6) <= theta < (math.pi / 3 + math.pi / 3):
+    elif delta_x<0 and delta_y>0 and delta_x<=delta_y:
       phase_dim = 3
-    elif (math.pi * 2 / 3) <= theta < (math.pi * 2 / 3 + math.pi / 6):
+    elif delta_x<0 and delta_y<0 and delta_x>delta_y:
       phase_dim = 4
-    elif (math.pi * 2 / 3 + math.pi / 6) <= theta < (math.pi * 2 / 3 + math.pi / 3):
+    elif delta_x<0 and delta_y<0 and delta_x<=delta_y:
       phase_dim = 5
-    elif (math.pi * 2 / 3 + math.pi / 3) <= theta < (math.pi * 2 / 3 + math.pi / 3 + math.pi / 6):
+    elif delta_x>0 and delta_y<0 and delta_x>delta_y:
       phase_dim = 6
-    elif (math.pi * 4 / 3) <= theta <= (math.pi * 4 / 3 + math.pi / 6):
+    elif delta_x>0 and delta_y<0 and delta_x<=delta_y:
       phase_dim = 7
+
   if phase_dim == -1:
     return vector
   else:
     vector[phase_dim] = 1
+    return vector
+
+
+def calulate_distance_in_phase_simple(self_x,self_y, enemy_x,enemy_y):
+  vector = np.zeros(8)
+  phase_dim = -1
+  delta_x = float(enemy_x - self_x)
+  delta_y = float(enemy_y - self_y)
+  distance = math.sqrt(delta_y**2 + delta_x**2)
+  if delta_x>=0 and delta_y>=0 and delta_x>delta_y:
+    phase_dim = 0
+  elif delta_x>0 and delta_y>0 and delta_x<=delta_y:
+    phase_dim =1
+  elif delta_x<=0 and delta_y>=0 and delta_x>delta_y:
+    phase_dim = 2
+  elif delta_x<=0 and delta_y>=0 and delta_x<=delta_y:
+    phase_dim = 3
+  elif delta_x<0 and delta_y<0 and delta_x>delta_y:
+    phase_dim = 4
+  elif delta_x<=0 and delta_y<=0 and delta_x<=delta_y:
+    phase_dim = 5
+  elif delta_x>0 and delta_y<0 and delta_x>delta_y:
+    phase_dim = 6
+  elif delta_x>=0 and delta_y<=0 and delta_x<=delta_y:
+    phase_dim = 7
+
+  if phase_dim == -1:
+    return vector
+  else:
+    vector[phase_dim] = distance
     return vector
 
 
@@ -140,17 +167,18 @@ def calulate_distance_in_phase(self_x, self_y, enemy_x, enemy_y):
 def calulate_enemy_num_distribution(self_x, self_y, enemy_x_list, enemy_y_list):
   total_vector = np.zeros(8)
   for index, one in enumerate (enemy_x_list):
-    vec_tmp = calulate_phase(self_x, self_y, one, enemy_y_list[index])
+    vec_tmp = calulate_phase_simple(self_x, self_y, one, enemy_y_list[index])
     total_vector += vec_tmp
   return total_vector
 
 
 def calulate_enemy_distance_distribution(self_x, self_y, enemy_x_list, enemy_y_list):
-  total_vector = np.zeros(8)
+  total_vector = list()
   for index, one in enumerate(enemy_x_list):
-    vec_tmp = calulate_distance_in_phase(self_x, self_y, one, enemy_y_list[index])
-    total_vector += vec_tmp
-  return total_vector
+    vec_tmp = calulate_distance_in_phase_simple(self_x, self_y, one, enemy_y_list[index])
+    total_vector.append((vec_tmp, np.linalg.norm(vec_tmp)))
+  total_vector = sorted(total_vector, key=lambda x:x[1])
+  return total_vector[0][0]
 
 class A3CAgent(object):
   """An agent specifically for solving the mini-game maps."""
@@ -244,7 +272,7 @@ class A3CAgent(object):
 
 
   def get_hand_crafted_feature(self, obs):
-    _PLAYER_HIT = features.SCREEN_FEATURES.unit_hit_points_ratio.index
+    _PLAYER_HIT = features.SCREEN_FEAT3URES.unit_hit_points.index
     player_hit_points = obs.observation["screen"][_PLAYER_HIT]
     _PLAYER_RELATIVE = features.SCREEN_FEATURES.player_relative.index
     player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
@@ -263,9 +291,16 @@ class A3CAgent(object):
                                                              enemy_y)
       vector_enemy_dist_8_dim = calulate_enemy_distance_distribution(friend_x[current_agent], friend_y[current_agent],
                                                                    enemy_x, enemy_y)
+      vector_friend_num_8_dim = calulate_enemy_num_distribution(friend_x[current_agent], friend_y[current_agent],
+                                                               friend_x,
+                                                               friend_y)
+      vector_friend_dist_8_dim = calulate_enemy_distance_distribution(friend_x[current_agent], friend_y[current_agent],
+                                                                   friend_x, friend_y)
     else:
       vector_enemy_num_8_dim = np.zeros(8)
       vector_enemy_dist_8_dim = np.zeros(8)
+      vector_friend_num_8_dim = np.zeros(8)
+      vector_friend_dist_8_dim = np.zeros(8)
     if len(friend_x)>0 and len(friend_y)>0:
       hit_points = player_hit_points[friend_y[current_agent]][friend_x[current_agent]]
     else:
@@ -279,7 +314,8 @@ class A3CAgent(object):
     else:
       self_pos[0] = -1
       self_pos[1] = -1
-    minimap = np.hstack((vector_enemy_num_8_dim, vector_enemy_dist_8_dim, hit_points, self_pos))
+    minimap = np.hstack((vector_enemy_num_8_dim, vector_enemy_dist_8_dim, hit_points, self_pos,
+                         vector_friend_num_8_dim,vector_friend_dist_8_dim))
     minimap = np.expand_dims(minimap, axis=0)
     return minimap
 
