@@ -22,6 +22,34 @@ _NOT_QUEUED = [0]
 _SELECT_ALL = [0]
 
 
+def filter_enemy_hp(hp_map, normal_map, enemy_id):
+    filtered_map = np.zeros(hp_map.shape)
+    for i in range(hp_map.shape[0]):
+        for j in range(hp_map.shape[-1]):
+            if normal_map[i][j] == enemy_id:
+                filtered_map[i][j] = hp_map[i][j]
+    return filtered_map
+
+
+def turn_hp_into_vector(map, self_x, self_y):
+    row = map.shape[0]
+    col = map.shape[1]
+    vec1 = map[0:self_x, 0:self_y]
+    vec2 = map[0:self_x, self_y:]
+    vec3 = map[self_x:, 0:self_y]
+    vec4 = map[self_x:, self_y:]
+    hp1 = np.sum(vec1)
+    hp2 = np.sum(vec2)
+    hp3 = np.sum(vec3)
+    hp4 = np.sum(vec4)
+    res = np.zeros(4)
+    res[0] = hp1
+    res[1] = hp2
+    res[2] = hp3
+    res[3] = hp4
+    return res
+
+
 def calulate_phase_simple(self_x,self_y, enemy_x,enemy_y):
   vector = np.zeros(8)
   phase_dim = -1
@@ -272,10 +300,13 @@ class A3CAgent(object):
 
 
   def get_hand_crafted_feature(self, obs):
-    _PLAYER_HIT = features.SCREEN_FEAT3URES.unit_hit_points.index
+    _PLAYER_HIT = features.SCREEN_FEATURES.unit_hit_points.index
     player_hit_points = obs.observation["screen"][_PLAYER_HIT]
     _PLAYER_RELATIVE = features.SCREEN_FEATURES.player_relative.index
     player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
+
+    enemy_hp_map = filter_enemy_hp(player_hit_points, player_relative, _PLAYER_HOSTILE)
+
     enemy_y, enemy_x = (player_relative == _PLAYER_HOSTILE).nonzero()
     friend_y, friend_x = (player_relative == _PLAYER_FRIENDLY).nonzero()
     if len(friend_x) != len(friend_y):
@@ -287,6 +318,7 @@ class A3CAgent(object):
       self.agent_num = self.agent_num + 1
     current_agent = self.agent_num
     if len(enemy_y)>0 and len(enemy_x)>0 and len(friend_x)>0 and len(friend_y)>0:
+      hp_vec_enemy = turn_hp_into_vector(enemy_hp_map, friend_x[current_agent], friend_y[current_agent])
       vector_enemy_num_8_dim = calulate_enemy_num_distribution(friend_x[current_agent], friend_y[current_agent], enemy_x,
                                                              enemy_y)
       vector_enemy_dist_8_dim = calulate_enemy_distance_distribution(friend_x[current_agent], friend_y[current_agent],
@@ -301,6 +333,7 @@ class A3CAgent(object):
       vector_enemy_dist_8_dim = np.zeros(8)
       vector_friend_num_8_dim = np.zeros(8)
       vector_friend_dist_8_dim = np.zeros(8)
+      hp_vec_enemy = np.zeros(4)
     if len(friend_x)>0 and len(friend_y)>0:
       hit_points = player_hit_points[friend_y[current_agent]][friend_x[current_agent]]
     else:
@@ -315,7 +348,7 @@ class A3CAgent(object):
       self_pos[0] = -1
       self_pos[1] = -1
     minimap = np.hstack((vector_enemy_num_8_dim, vector_enemy_dist_8_dim, hit_points, self_pos,
-                         vector_friend_num_8_dim,vector_friend_dist_8_dim))
+                         vector_friend_num_8_dim,vector_friend_dist_8_dim, hp_vec_enemy))
     minimap = np.expand_dims(minimap, axis=0)
     return minimap
 
