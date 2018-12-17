@@ -114,6 +114,19 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                  stride=1,
                                  activation_fn=None,
                                  scope='spatial_action')
+  spatial_action_mask = np.zeros((ssize,ssize))
+  for i in range(ssize):
+      for j in range(ssize):
+          if i == 0:
+              spatial_action_mask[i][j] = 1
+          if i == ssize-1:
+              spatial_action_mask[i][j] = 1
+          if j == 0:
+              spatial_action_mask[i][j] = 1
+          if j == ssize-1:
+              spatial_action_mask[i][j] = 1
+  spatial_action_mask = np.reshape(spatial_action_mask, (spatial_action_mask.shape[0], spatial_action_mask.shape[1], -1))
+  spatial_action = tf.multiply(spatial_action, spatial_action_mask)
   spatial_action = tf.nn.softmax(layers.flatten(spatial_action))
 
   # Compute non spatial actions and value
