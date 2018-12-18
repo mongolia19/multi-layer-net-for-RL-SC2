@@ -77,6 +77,11 @@ def build_atari(minimap, screen, info, msize, ssize, num_action):
   return spatial_action, non_spatial_action, value
 
 
+def max_unpool_2x2(x, shape):
+    inference = tf.image.resize_nearest_neighbor(x, tf.stack([shape[1]*2, shape[2]*2]))
+    return inference
+
+
 def build_fcn(minimap, screen, info, msize, ssize, num_action):
   # Extract features
   # player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
@@ -94,11 +99,14 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                          kernel_size=5,
                          stride=1,
                          scope='sconv1')
-  sconv2 = layers.conv2d(sconv1,
-                         num_outputs=32,
-                         kernel_size=3,
-                         stride=1,
-                         scope='sconv2')
+  pooled = tf.layers.max_pooling2d(inputs=sconv1, pool_size=[2, 2], strides=2)
+  unpooled = max_unpool_2x2(pooled, sconv1.shape)
+  pooled_1 = tf.layers.max_pooling2d(inputs=unpooled, pool_size=[2, 2], strides=2)
+  # sconv2 = layers.conv2d(sconv1,
+  #                        num_outputs=32,
+  #                        kernel_size=3,
+  #                        stride=1,
+  #                        scope='sconv2')
   info_fc = layers.fully_connected(layers.flatten(info),
                                    num_outputs=256,
                                    activation_fn=tf.tanh,
@@ -107,13 +115,21 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   # Compute spatial actions
   # feat_conv = tf.concat([mconv2, sconv2], axis=3)
   # feat_conv = tf.concat([layers.flatten(mconv2), layers.flatten(sconv2)], axis=1)
-  feat_conv = sconv2
+  feat_conv = pooled_1
   spatial_action = layers.conv2d(feat_conv,
                                  num_outputs=1,
                                  kernel_size=1,
                                  stride=1,
                                  activation_fn=None,
                                  scope='spatial_action')
+  feat_conv_attention = tf.layers.flatten(spatial_action)
+  att_size = feat_conv_attention.shape[-1].value
+  attention_k = layers.fully_connected(feat_conv_attention,num_outputs=att_size, activation_fn=None, scope='attention_k')
+  attention_q = layers.fully_connected(feat_conv_attention, att_size, activation_fn=None, scope='attention_q')
+  attention_v = layers.fully_connected(feat_conv_attention, att_size, activation_fn=None, scope='attention_v')
+  k_q_matrix = tf.matmul(attention_k, attention_q,transpose_b=True)
+  attention_weighted_vec = tf.matmul(k_q_matrix, attention_v)
+  attention_weighted_vec = tf.layers.flatten(attention_weighted_vec)
   spatial_action_mask = np.zeros((ssize,ssize))
   for i in range(ssize):
       for j in range(ssize):
@@ -125,18 +141,19 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
               spatial_action_mask[i][j] = 1
           if j == ssize-1:
               spatial_action_mask[i][j] = 1
-  spatial_action_mask = np.reshape(spatial_action_mask, (spatial_action_mask.shape[0], spatial_action_mask.shape[1], -1))
-  spatial_action = tf.multiply(spatial_action, spatial_action_mask)
-  spatial_action = tf.nn.softmax(layers.flatten(spatial_action))
+  # spatial_action_mask = np.reshape(spatial_action_mask, (spatial_action_mask.shape[0], spatial_action_mask.shape[1], -1))
+  spatial_action_mask = np.ndarray.flatten(spatial_action_mask)
+  attention_weighted_vec = tf.multiply(attention_weighted_vec, spatial_action_mask)
+  spatial_action_out = tf.nn.softmax(layers.flatten(attention_weighted_vec))
 
   # Compute non spatial actions and value
-  feat_fc = tf.concat([layers.flatten(mconv2), layers.flatten(sconv2), info_fc], axis=1)
+  feat_fc = tf.concat([layers.flatten(mconv2), layers.flatten(pooled_1), info_fc], axis=1)
   feat_fc = layers.fully_connected(feat_fc,
                                    num_outputs=128,
                                    activation_fn=tf.nn.relu,
                                    scope='feat_fc')
   # num_attack_action = 3
-  local_fc = layers.flatten(sconv2)
+  local_fc = layers.flatten(pooled_1)
   att_ct_layer = layers.fully_connected(local_fc, num_outputs=128, activation_fn=tf.nn.relu, scope="attack_control_layer")
   attack_action = layers.fully_connected(att_ct_layer, num_outputs=num_action, activation_fn = None, scope='action_attack_layer')
   att_mask = np.zeros((num_action), np.float)
@@ -201,4 +218,4 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                             activation_fn=None,
                                             scope='value'), [-1])
 
-  return spatial_action, non_spatial_action, value
+  return spatial_action_out, non_spatial_action, value
