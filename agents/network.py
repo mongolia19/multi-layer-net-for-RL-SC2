@@ -82,6 +82,19 @@ def max_unpool_2x2(x, shape):
     return inference
 
 
+def build_linear_model(trajectories, linear_units):
+    """
+    Function to build a subgraph
+    """
+    import math
+    with tf.name_scope('linear_att'):
+        weights = tf.get_variable(name='linear_weights', initializer=
+            tf.truncated_normal((linear_units, linear_units), stddev=1.0 / math.sqrt(float(150))))
+        biases = tf.get_variable(name='linear_biases', initializer=tf.zeros((linear_units)))
+        linear_trans = tf.matmul(trajectories, weights) + biases
+    return linear_trans
+
+
 def build_fcn(minimap, screen, info, msize, ssize, num_action):
   # Extract features
   # player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
@@ -124,12 +137,16 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                  scope='spatial_action')
   feat_conv_attention = tf.layers.flatten(spatial_action)
   att_size = feat_conv_attention.shape[-1].value
-  attention_k = layers.fully_connected(feat_conv_attention,num_outputs=att_size, activation_fn=None, scope='attention_k')
-  attention_q = layers.fully_connected(feat_conv_attention, att_size, activation_fn=None, scope='attention_q')
-  attention_v = layers.fully_connected(feat_conv_attention, att_size, activation_fn=None, scope='attention_v')
-  k_q_matrix = tf.matmul(attention_k, attention_q,transpose_b=True)
-  attention_weighted_vec = tf.matmul(k_q_matrix, attention_v)
+  # attention_k = layers.fully_connected(feat_conv_attention,num_outputs=att_size, activation_fn=None, scope='attention_k')
+  with tf.variable_scope('traj_embedding',reuse=tf.AUTO_REUSE) as scope:
+    attention_k = build_linear_model(feat_conv_attention, att_size)
+    scope.reuse_variables()
+    attention_q = build_linear_model(feat_conv_attention, att_size)
+    attention_v = build_linear_model(feat_conv_attention, att_size)
+    k_q_matrix = tf.matmul(attention_k, attention_q,transpose_b=True)
+    attention_weighted_vec = tf.matmul(k_q_matrix, attention_v)
   attention_weighted_vec = tf.layers.flatten(attention_weighted_vec)
+  # create spatial action mask
   spatial_action_mask = np.zeros((ssize,ssize))
   for i in range(ssize):
       for j in range(ssize):
@@ -141,8 +158,8 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
               spatial_action_mask[i][j] = 1
           if j == ssize-1:
               spatial_action_mask[i][j] = 1
-  # spatial_action_mask = np.reshape(spatial_action_mask, (spatial_action_mask.shape[0], spatial_action_mask.shape[1], -1))
   spatial_action_mask = np.ndarray.flatten(spatial_action_mask)
+  # mask spatial actions
   attention_weighted_vec = tf.multiply(attention_weighted_vec, spatial_action_mask)
   spatial_action_out = tf.nn.softmax(layers.flatten(attention_weighted_vec))
 
@@ -217,5 +234,4 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                             num_outputs=1,
                                             activation_fn=None,
                                             scope='value'), [-1])
-
   return spatial_action_out, non_spatial_action, value
