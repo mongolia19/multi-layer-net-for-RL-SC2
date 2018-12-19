@@ -150,13 +150,17 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   spatial_action_mask = np.zeros((ssize,ssize))
   for i in range(ssize):
       for j in range(ssize):
-          if i == 0:
+          if i == ssize//2:
               spatial_action_mask[i][j] = 1
-          if i == ssize-1:
+          if j == ssize//2:
               spatial_action_mask[i][j] = 1
-          if j == 0:
+          if i == ssize//3:
               spatial_action_mask[i][j] = 1
-          if j == ssize-1:
+          if j == ssize//3:
+              spatial_action_mask[i][j] = 1
+          if i == 2*ssize//3:
+              spatial_action_mask[i][j] = 1
+          if j == 2 * ssize // 3:
               spatial_action_mask[i][j] = 1
   spatial_action_mask = np.ndarray.flatten(spatial_action_mask)
   # mask spatial actions
