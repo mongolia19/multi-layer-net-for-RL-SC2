@@ -232,10 +232,11 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   #     merged_attack_motion = layers.flatten(attack_action_mask)
   # else:
   #     merged_attack_motion = layers.flatten(motion_action_mask)
-  non_spatial_action = layers.fully_connected(merged_attack_motion,
-                                                  num_outputs=num_action,
-                                                  activation_fn=tf.nn.softmax,
-                                                  scope='non_spatial_action')
+  # non_spatial_action = layers.fully_connected(merged_attack_motion,
+  #                                                 num_outputs=num_action,
+  #                                                 activation_fn=tf.nn.softmax,
+  #                                                 scope='non_spatial_action')
+  non_spatial_action = tf.nn.softmax(merged_attack_motion)
   value = tf.reshape(layers.fully_connected(feat_fc,
                                             num_outputs=1,
                                             activation_fn=None,
