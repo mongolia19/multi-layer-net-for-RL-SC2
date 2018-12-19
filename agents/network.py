@@ -177,7 +177,7 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                    scope='feat_fc')
   # num_attack_action = 3
   local_fc = layers.flatten(mconv1)
-  att_ct_layer = layers.fully_connected(local_fc, num_outputs=128, activation_fn=tf.nn.relu, scope="attack_control_layer")
+  att_ct_layer = layers.fully_connected(local_fc, num_outputs=4, activation_fn=tf.nn.relu, scope="attack_control_layer")
   attack_action = layers.fully_connected(att_ct_layer, num_outputs=num_action, activation_fn = None, scope='action_attack_layer')
   att_mask = np.zeros((num_action), np.float)
   att_mask[0:8] = 1
@@ -187,7 +187,7 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
 
   # num_motion_action = 10
   global_fc = layers.flatten(mconv2)
-  mot_ct_layer = layers.fully_connected(global_fc, num_outputs=128, activation_fn=tf.nn.relu, scope="motion_control_layer")
+  mot_ct_layer = layers.fully_connected(global_fc, num_outputs=4, activation_fn=tf.nn.relu, scope="motion_control_layer")
   motion_action = layers.fully_connected(mot_ct_layer, num_outputs=num_action, activation_fn = None,
                                          scope='action_motion_layer')
   mot_mask = np.zeros((num_action), np.float)
