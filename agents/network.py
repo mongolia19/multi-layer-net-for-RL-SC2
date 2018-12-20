@@ -180,8 +180,8 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   att_ct_layer = layers.fully_connected(local_fc, num_outputs=4, activation_fn=tf.nn.relu, scope="attack_control_layer")
   attack_action = layers.fully_connected(att_ct_layer, num_outputs=num_action, activation_fn = None, scope='action_attack_layer')
   att_mask = np.zeros((num_action), np.float)
-  att_mask[0:8] = 1
-  att_mask[12:19] = 1
+  # att_mask[0:8] = 1
+  # att_mask[12:19] = 1
   attack_action_mask = tf.multiply(attack_action, att_mask)
 
 
