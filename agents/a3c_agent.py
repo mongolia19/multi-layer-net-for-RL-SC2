@@ -356,7 +356,7 @@ class A3CAgent(object):
     self_pos = np.zeros(2)
     self_pos[0] = selected_x
     self_pos[1] = selected_y
-    minimap = np.hstack((vector_enemy_num_8_dim, vector_enemy_dist_8_dim, hit_points, self_pos,
+    minimap = np.hstack((self_pos, vector_enemy_num_8_dim, vector_enemy_dist_8_dim, hit_points,
                          vector_friend_num_8_dim,vector_friend_dist_8_dim, hp_vec_enemy))
     minimap = np.expand_dims(minimap, axis=0)
     return minimap

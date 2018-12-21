@@ -97,7 +97,28 @@ def build_linear_model(trajectories, linear_units):
 
 def build_fcn(minimap, screen, info, msize, ssize, num_action):
   # Extract features
+  self_x_index = 0
+  self_y_index = 1
   # player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
+
+  def _compress_np(a):
+    for i in range(a.size):
+      if a[i]>= ssize-1:
+        a[i] = ssize-2
+      if a[i]<1:
+        a[i] = 1
+    return a
+
+
+  def compress_tensor(a):
+      return tf.py_func(_compress_np, [a], tf.int32)
+
+
+  self_x = tf.slice(minimap,[-1,0],[-1,1])
+  self_y = tf.slice(minimap,[-1,1],[-1,1])
+  # x_compressed = tf.Variable(np.zeros([1]))
+  # tf.py_func(_compress_np, self_x, x_compressed)
+  x_compressed = compress_tensor(self_x)
   mconv1 = layers.fully_connected(layers.flatten(minimap),
                          num_outputs=16,
                          scope='mconv1', activation_fn=tf.nn.relu)
@@ -136,6 +157,7 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   #                                activation_fn=None,
   #                                scope='spatial_action')
   spatial_action = layers.fully_connected(mconv1,ssize*ssize,activation_fn=tf.nn.relu, scope='spatial_layer')
+  # spatial_action_np = spatial_action.eval()
   attention_weighted_vec = spatial_action
   # feat_conv_attention = tf.layers.flatten(spatial_action)
   # att_size = feat_conv_attention.shape[-1].value
@@ -222,6 +244,10 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
           return c
       else:
           return d
+
+
+
+
 
   def f1():return layers.flatten(attack_action_mask)
   def f2():return layers.flatten(motion_action_mask)
