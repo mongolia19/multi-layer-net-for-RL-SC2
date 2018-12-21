@@ -100,7 +100,7 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   self_x_index = 0
   self_y_index = 1
   # player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
-
+  # 准备只使用八个方向， 先把自己位置往中间挪一格，如果在边缘的话，下一步在这八个方向四周设置行动的八个输出
   def _compress_np(a):
     for i in range(a.size):
       if a[i]>= ssize-1:
