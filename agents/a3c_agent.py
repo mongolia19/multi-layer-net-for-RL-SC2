@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 from pysc2.lib import actions
 from pysc2.lib import features
-
+from math import fabs as abs
 from agents.network import build_net
 import utils as U
 
@@ -63,24 +63,25 @@ def calulate_phase_simple(self_x,self_y, enemy_x,enemy_y):
   elif math.fabs(delta_x) < 0.01 and delta_y > 0:
     phase_dim = 2
   else:
-    if delta_x>0 and delta_y>0 and delta_x>delta_y:
+    if delta_x>=0 and delta_y>=0 and abs(delta_x)>abs(delta_y):
       phase_dim = 0
-    elif delta_x>0 and delta_y>0 and delta_x<=delta_y:
+    elif delta_x>=0 and delta_y>=0 and abs(delta_x)<=abs(delta_y):
       phase_dim =1
-    elif delta_x<0 and delta_y>0 and delta_x>delta_y:
+    elif delta_x<=0 and delta_y>=0 and abs(delta_x)>abs(delta_y):
       phase_dim = 2
-    elif delta_x<0 and delta_y>0 and delta_x<=delta_y:
+    elif delta_x<=0 and delta_y>=0 and abs(delta_x)<=abs(delta_y):
       phase_dim = 3
-    elif delta_x<0 and delta_y<0 and delta_x>delta_y:
+    elif delta_x<=0 and delta_y<=0 and abs(delta_x)>abs(delta_y):
       phase_dim = 4
-    elif delta_x<0 and delta_y<0 and delta_x<=delta_y:
+    elif delta_x<=0 and delta_y<=0 and abs(delta_x)<=abs(delta_y):
       phase_dim = 5
-    elif delta_x>0 and delta_y<0 and delta_x>delta_y:
+    elif delta_x>=0 and delta_y<=0 and abs(delta_x)>abs(delta_y):
       phase_dim = 6
-    elif delta_x>0 and delta_y<0 and delta_x<=delta_y:
+    elif delta_x>=0 and delta_y<=0 and abs(delta_x)<=abs(delta_y):
       phase_dim = 7
 
   if phase_dim == -1:
+    print('calulate_phase_simple maybe wrong')
     return vector
   else:
     vector[phase_dim] = 1
@@ -95,22 +96,23 @@ def calulate_distance_in_phase_simple(self_x,self_y, enemy_x,enemy_y):
   distance = math.sqrt(delta_y**2 + delta_x**2)
   if delta_x>=0 and delta_y>=0 and delta_x>delta_y:
     phase_dim = 0
-  elif delta_x>0 and delta_y>0 and delta_x<=delta_y:
+  elif delta_x>=0 and delta_y>=0 and delta_x<=delta_y:
     phase_dim =1
-  elif delta_x<=0 and delta_y>=0 and delta_x>delta_y:
+  elif delta_x<=0 and delta_y>=0 and abs(delta_x)>abs(delta_y):
     phase_dim = 2
-  elif delta_x<=0 and delta_y>=0 and delta_x<=delta_y:
+  elif delta_x<=0 and delta_y>=0 and abs(delta_x)<=abs(delta_y):
     phase_dim = 3
-  elif delta_x<0 and delta_y<0 and delta_x>delta_y:
+  elif delta_x<=0 and delta_y<=0 and abs(delta_x)>abs(delta_y):
     phase_dim = 4
-  elif delta_x<=0 and delta_y<=0 and delta_x<=delta_y:
+  elif delta_x<=0 and delta_y<=0 and abs(delta_x)<=abs(delta_y):
     phase_dim = 5
-  elif delta_x>0 and delta_y<0 and delta_x>delta_y:
+  elif delta_x>=0 and delta_y<=0 and abs(delta_x)>abs(delta_y):
     phase_dim = 6
-  elif delta_x>=0 and delta_y<=0 and delta_x<=delta_y:
+  elif delta_x>=0 and delta_y<=0 and abs(delta_x)<=abs(delta_y):
     phase_dim = 7
 
   if phase_dim == -1:
+    print('maybe wrong in  calulate_distance_in_phase_simple')
     return vector
   else:
     vector[phase_dim] = distance
@@ -320,7 +322,8 @@ class A3CAgent(object):
     player_selected = obs.observation["screen"][_PLAYER_SELECTED]
     selected_x, selected_y = get_group_x_y(player_selected)
     enemy_hp_map = filter_enemy_hp(player_hit_points, player_relative, _PLAYER_HOSTILE)
-    enemy_y, enemy_x = (player_relative == _PLAYER_HOSTILE).nonzero()
+    # enemy_y, enemy_x = (player_relative == _PLAYER_HOSTILE).nonzero()
+    enemy_y, enemy_x = (player_relative == _PLAYER_NEUTRAL).nonzero()
     friend_y, friend_x = (player_relative == _PLAYER_FRIENDLY).nonzero()
     if len(friend_x) != len(friend_y):
       print("friend_x num != friend_y num")
