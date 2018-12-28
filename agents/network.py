@@ -97,9 +97,6 @@ def build_linear_model(trajectories, linear_units):
 
 def build_fcn(minimap, screen, info, msize, ssize, num_action):
   # Extract features
-  self_x_index = 0
-  self_y_index = 1
-  # player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
   # 准备只使用八个方向， 先把自己位置往中间挪一格，如果在边缘的话，下一步在这八个方向四周设置行动的八个输出
   def _compress_np(a):
     for i in range(a.size):
@@ -109,16 +106,6 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
         a[i] = 1
     return a
 
-
-  def compress_tensor(a):
-      return tf.py_func(_compress_np, [a], tf.int32)
-
-
-  self_x = tf.slice(minimap,[-1,0],[-1,1])
-  self_y = tf.slice(minimap,[-1,1],[-1,1])
-  # x_compressed = tf.Variable(np.zeros([1]))
-  # tf.py_func(_compress_np, self_x, x_compressed)
-  x_compressed = compress_tensor(self_x)
   mconv1 = layers.fully_connected(layers.flatten(minimap),
                          num_outputs=16,
                          scope='mconv1', activation_fn=tf.nn.relu)
@@ -156,9 +143,9 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   #                                stride=1,
   #                                activation_fn=None,
   #                                scope='spatial_action')
-  spatial_action = layers.fully_connected(mconv1,ssize*ssize,activation_fn=tf.nn.relu, scope='spatial_layer')
+  spatial_action = layers.fully_connected(mconv1, 8, activation_fn=tf.nn.relu, scope='spatial_layer')
   # spatial_action_np = spatial_action.eval()
-  attention_weighted_vec = spatial_action
+  # attention_weighted_vec = spatial_action
   # feat_conv_attention = tf.layers.flatten(spatial_action)
   # att_size = feat_conv_attention.shape[-1].value
   # attention_k = layers.fully_connected(feat_conv_attention,num_outputs=att_size, activation_fn=None, scope='attention_k')
@@ -169,27 +156,9 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   #   attention_v = build_linear_model(feat_conv_attention, att_size)
   #   k_q_matrix = tf.matmul(attention_k, attention_q,transpose_b=True)
   #   attention_weighted_vec = tf.matmul(k_q_matrix, attention_v)
-  attention_weighted_vec = tf.layers.flatten(attention_weighted_vec)
+  # attention_weighted_vec = tf.layers.flatten(attention_weighted_vec)
   # create spatial action mask
-  spatial_action_mask = np.zeros((ssize,ssize))
-  for i in range(ssize):
-      for j in range(ssize):
-          if i == ssize//2:
-              spatial_action_mask[i][j] = 1
-          if j == ssize//2:
-              spatial_action_mask[i][j] = 1
-          if i == ssize//3:
-              spatial_action_mask[i][j] = 1
-          if j == ssize//3:
-              spatial_action_mask[i][j] = 1
-          if i == 2*ssize//3:
-              spatial_action_mask[i][j] = 1
-          if j == 2 * ssize // 3:
-              spatial_action_mask[i][j] = 1
-  spatial_action_mask = np.ndarray.flatten(spatial_action_mask)
-  # mask spatial actions
-  attention_weighted_vec = tf.multiply(attention_weighted_vec, spatial_action_mask)
-  spatial_action_out = tf.nn.softmax(layers.flatten(attention_weighted_vec))
+  spatial_action_out = tf.nn.softmax(layers.flatten(spatial_action))
 
   # Compute non spatial actions and value
   feat_fc = tf.concat([layers.flatten(mconv1), info_fc], axis=1)
@@ -221,10 +190,7 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                               num_outputs=2,
                                               activation_fn=tf.nn.softmax,
                                               scope='policy_router')
-  a = tf.reshape(tf.convert_to_tensor([1, 0]), [1,2])
-  b = tf.convert_to_tensor([0, 1])
   left = tf.boolean_mask(policy_router, np.array([True, False]), axis=1)
-  
   right = tf.boolean_mask(policy_router, np.array([False, True]), axis=1)
   left = tf.reduce_sum(left)
   right = tf.reduce_sum(right)
@@ -232,36 +198,8 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   masked_attack_vector = tf.multiply(attack_action_mask, left)
   masked_motion_vector = tf.multiply(motion_action_mask, right)
 
-  # merged_attack_motion = layers.flatten(motion_action_mask)
   merged_attack_motion = tf.add(masked_motion_vector, masked_attack_vector)
-  # c = tf.equal(b, tf.cast(policy_shape, tf.int32))
-  def conditon_tf(condition_tensor_1, condition_tensor_2 ,tensor_a, tensor_b):
-      tile_tensor_a = tf.py_func(_condition_tf, [condition_tensor_1, condition_tensor_2, tensor_a, tensor_b], tf.float32)
-      return tile_tensor_a
 
-  def _condition_tf(a, b, c, d):
-      if a == b:
-          return c
-      else:
-          return d
-
-
-
-
-
-  def f1():return layers.flatten(attack_action_mask)
-  def f2():return layers.flatten(motion_action_mask)
-
-  # merged_attack_motion = tf.cond(c, f1, f2)
-  # merged_attack_motion = conditon_tf(policy_router, b, layers.flatten(attack_action_mask), layers.flatten(motion_action_mask))
-  # if policy_router[0]>0:
-  #     merged_attack_motion = layers.flatten(attack_action_mask)
-  # else:
-  #     merged_attack_motion = layers.flatten(motion_action_mask)
-  # non_spatial_action = layers.fully_connected(merged_attack_motion,
-  #                                                 num_outputs=num_action,
-  #                                                 activation_fn=tf.nn.softmax,
-  #                                                 scope='non_spatial_action')
   non_spatial_action = tf.nn.softmax(merged_attack_motion)
   value = tf.reshape(layers.fully_connected(feat_fc,
                                             num_outputs=1,

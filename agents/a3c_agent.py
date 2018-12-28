@@ -222,8 +222,69 @@ def get_group_x_y(player_selected):
   return int(mean_x), int(mean_y)
 
 
+def merge_target_with_position(target, x, y, ssize):
+    # 0 up left ；1 up； 2 up right； 3 left； 4 right；5 left down 6 down 7 right down
+    target_x = 0
+    target_y = 0
+    if target == 0:
+      target_x = x -1
+      target_y = y -1
+    elif target == 1:
+      target_x = x
+      target_y = y - 1
+    elif target == 2:
+      target_x = x + 1
+      target_y = y - 1
+    elif target == 3:
+      target_x = x - 1
+      target_y = y
+    elif target == 4:
+      target_x = x + 1
+      target_y = y
+    elif target == 5:
+      target_x = x - 1
+      target_y = y + 1
+    elif target == 6:
+      target_x = x
+      target_y = y + 1
+    elif target == 7:
+      target_x = x + 1
+      target_y = y + 1
+    if target_y>=ssize:
+      target_y = ssize - 1
+    if target_x>=ssize:
+      target_x = ssize - 1
+    if target_x<0:
+      target_x =0
+    if target_y<0:
+      target_y = 0
+    return target_x, target_y
+
+
+def convert_xy_2_eight_direction(x, y, new_x, new_y):
+    if new_x<x and new_y<y :
+        return 0
+    elif new_x==x and new_y<y:
+        return 1
+    elif new_x>x and new_y<y:
+        return 2
+    elif new_x<x and new_y==y:
+        return 3
+    elif new_x>x and new_y==y:
+        return 4
+    elif new_x<x and new_y>y:
+        return 5
+    elif new_x==x and new_y>y:
+        return 6
+    elif new_x>x and new_x>y:
+        return 7
+    else:
+        return 0
+
+
 class A3CAgent(object):
   """An agent specifically for solving the mini-game maps."""
+  EIGHT_SPATIAL_ACTION = 8
   def __init__(self, training, msize, ssize, name='A3C/A3CAgent'):
     self.name = name
     self.training = training
@@ -269,7 +330,7 @@ class A3CAgent(object):
 
       # Set targets and masks
       self.valid_spatial_action = tf.placeholder(tf.float32, [None], name='valid_spatial_action')
-      self.spatial_action_selected = tf.placeholder(tf.float32, [None, self.ssize**2], name='spatial_action_selected')
+      self.spatial_action_selected = tf.placeholder(tf.float32, [None, A3CAgent.EIGHT_SPATIAL_ACTION], name='spatial_action_selected')
       self.valid_non_spatial_action = tf.placeholder(tf.float32, [None, len(actions.FUNCTIONS)], name='valid_non_spatial_action')
       self.non_spatial_action_selected = tf.placeholder(tf.float32, [None, len(actions.FUNCTIONS)], name='non_spatial_action_selected')
       self.value_target = tf.placeholder(tf.float32, [None], name='value_target')
@@ -387,7 +448,11 @@ class A3CAgent(object):
     valid_actions = obs.observation['available_actions']
     act_id = valid_actions[np.argmax(non_spatial_action[valid_actions])]
     target = np.argmax(spatial_action)
-    target = [int(target // self.ssize), int(target % self.ssize)]
+    x = minimap[0][0]
+    y = minimap[0][1]
+    next_y, next_x = merge_target_with_position(target, x, y, self.ssize)
+    # target = [int(target // self.ssize), int(target % self.ssize)]
+    target = [next_y, next_x]
 
     if False:
       print(actions.FUNCTIONS[act_id].name, target)
@@ -439,7 +504,7 @@ class A3CAgent(object):
     value_target[-1] = R
 
     valid_spatial_action = np.zeros([len(rbs)], dtype=np.float32)
-    spatial_action_selected = np.zeros([len(rbs), self.ssize**2], dtype=np.float32)
+    spatial_action_selected = np.zeros([len(rbs), A3CAgent.EIGHT_SPATIAL_ACTION], dtype=np.float32)
     valid_non_spatial_action = np.zeros([len(rbs), len(actions.FUNCTIONS)], dtype=np.float32)
     non_spatial_action_selected = np.zeros([len(rbs), len(actions.FUNCTIONS)], dtype=np.float32)
 
@@ -448,6 +513,8 @@ class A3CAgent(object):
       # minimap = np.array(obs.observation['minimap'], dtype=np.float32)
       # minimap = np.expand_dims(U.preprocess_minimap(minimap), axis=0)
       minimap = self.get_hand_crafted_feature(obs)
+      current_x = minimap[0][0]
+      current_y = minimap[0][1]
       screen = np.array(obs.observation['screen'], dtype=np.float32)
       screen = np.expand_dims(U.preprocess_screen(screen), axis=0)
       info = np.zeros([1, self.isize], dtype=np.float32)
@@ -470,7 +537,10 @@ class A3CAgent(object):
       args = actions.FUNCTIONS[act_id].args
       for arg, act_arg in zip(args, act_args):
         if arg.name in ('screen', 'minimap', 'screen2'):
-          ind = act_arg[1] * self.ssize + act_arg[0]
+            # act_arg[0] -->y act_arg[1] -->x
+          eight_digit = convert_xy_2_eight_direction(current_x, current_y, act_arg[1], act_arg[0])
+          ind = eight_digit
+          # ind = act_arg[1] * self.ssize + act_arg[0]
           valid_spatial_action[i] = 1
           spatial_action_selected[i, ind] = 1
 
