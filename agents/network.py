@@ -167,40 +167,17 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
                                    activation_fn=tf.nn.relu,
                                    scope='feat_fc')
   # num_attack_action = 3
-  local_fc = layers.flatten(mconv1)
-  att_ct_layer = layers.fully_connected(local_fc, num_outputs=4, activation_fn=tf.nn.relu, scope="attack_control_layer")
-  attack_action = layers.fully_connected(att_ct_layer, num_outputs=num_action, activation_fn = None, scope='action_attack_layer')
-  att_mask = np.zeros((num_action), np.float)
-  # att_mask[0:8] = 1
-  # att_mask[12:19] = 1
-  attack_action_mask = tf.multiply(attack_action, att_mask)
 
 
   # num_motion_action = 10
   global_fc = layers.flatten(mconv2)
-  mot_ct_layer = layers.fully_connected(global_fc, num_outputs=4, activation_fn=tf.nn.relu, scope="motion_control_layer")
-  motion_action = layers.fully_connected(mot_ct_layer, num_outputs=num_action, activation_fn = None,
-                                         scope='action_motion_layer')
+
+  motion_action = layers.fully_connected(global_fc, num_outputs=num_action, activation_fn=tf.nn.relu, scope="motion_control_layer")
   mot_mask = np.zeros((num_action), np.float)
   mot_mask[:11] = 1
   mot_mask[330:350] = 1
-  motion_action_mask = tf.multiply(motion_action, mot_mask)
-
-  policy_router = layers.fully_connected(feat_fc,
-                                              num_outputs=2,
-                                              activation_fn=tf.nn.softmax,
-                                              scope='policy_router')
-  left = tf.boolean_mask(policy_router, np.array([True, False]), axis=1)
-  right = tf.boolean_mask(policy_router, np.array([False, True]), axis=1)
-  left = tf.reduce_sum(left)
-  right = tf.reduce_sum(right)
-  # merged_attack_motion = layers.flatten(attack_action_mask)
-  masked_attack_vector = tf.multiply(attack_action_mask, left)
-  masked_motion_vector = tf.multiply(motion_action_mask, right)
-
-  merged_attack_motion = tf.add(masked_motion_vector, masked_attack_vector)
-
-  non_spatial_action = tf.nn.softmax(merged_attack_motion)
+  motion_action_masked = tf.multiply(motion_action, mot_mask)
+  non_spatial_action = tf.nn.softmax(motion_action_masked)
   value = tf.reshape(layers.fully_connected(feat_fc,
                                             num_outputs=1,
                                             activation_fn=None,
