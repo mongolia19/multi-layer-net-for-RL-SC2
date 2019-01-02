@@ -98,36 +98,29 @@ def build_linear_model(trajectories, linear_units):
 def build_fcn(minimap, screen, info, msize, ssize, num_action):
   # Extract features
   # 准备只使用八个方向， 先把自己位置往中间挪一格，如果在边缘的话，下一步在这八个方向四周设置行动的八个输出
-  def _compress_np(a):
-    for i in range(a.size):
-      if a[i]>= ssize-1:
-        a[i] = ssize-2
-      if a[i]<1:
-        a[i] = 1
-    return a
 
-  mconv1 = layers.fully_connected(layers.flatten(minimap),
-                         num_outputs=16,
-                         scope='mconv1', activation_fn=tf.nn.relu)
+  # mconv1 = layers.fully_connected(layers.flatten(minimap),
+  #                        num_outputs=16,
+  #                        scope='mconv1', activation_fn=tf.nn.relu)
   # mconv2 = layers.conv2d(mconv1,
   #                        num_outputs=32,
   #                        kernel_size=3,
   #                        stride=1,
   #                        scope='mconv2')
-  mconv2 = mconv1
-  # sconv1 = layers.conv2d(tf.transpose(screen, [0, 2, 3, 1]),
-  #                        num_outputs=16,
-  #                        kernel_size=5,
-  #                        stride=1,
-  #                        scope='sconv1')
+  # mconv2 = mconv1
+  sconv1 = layers.conv2d(tf.transpose(screen, [0, 2, 3, 1]),
+                         num_outputs=16,
+                         kernel_size=5,
+                         stride=1,
+                         scope='sconv1')
   # pooled = tf.layers.max_pooling2d(inputs=sconv1, pool_size=[2, 2], strides=2)
   # unpooled = max_unpool_2x2(pooled, sconv1.shape)
   # pooled_1 = tf.layers.max_pooling2d(inputs=unpooled, pool_size=[2, 2], strides=2)
-  # sconv2 = layers.conv2d(sconv1,
-  #                        num_outputs=32,
-  #                        kernel_size=3,
-  #                        stride=1,
-  #                        scope='sconv2')
+  sconv2 = layers.conv2d(sconv1,
+                         num_outputs=32,
+                         kernel_size=3,
+                         stride=1,
+                         scope='sconv2')
   info_fc = layers.fully_connected(layers.flatten(info),
                                    num_outputs=256,
                                    activation_fn=tf.tanh,
@@ -143,10 +136,10 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   #                                stride=1,
   #                                activation_fn=None,
   #                                scope='spatial_action')
-  spatial_action = layers.fully_connected(mconv1, 8, activation_fn=tf.nn.relu, scope='spatial_layer')
-  # spatial_action_np = spatial_action.eval()
+  spatial_action = layers.fully_connected(sconv2, 8, activation_fn=tf.nn.relu, scope='spatial_layer')
   # attention_weighted_vec = spatial_action
-  # feat_conv_attention = tf.layers.flatten(spatial_action)
+  feat_conv_attention = tf.layers.flatten(spatial_action)
+  feat_conv_attention = layers.fully_connected(feat_conv_attention, 8)
   # att_size = feat_conv_attention.shape[-1].value
   # attention_k = layers.fully_connected(feat_conv_attention,num_outputs=att_size, activation_fn=None, scope='attention_k')
   # with tf.variable_scope('traj_embedding',reuse=tf.AUTO_REUSE) as scope:
@@ -158,10 +151,10 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   #   attention_weighted_vec = tf.matmul(k_q_matrix, attention_v)
   # attention_weighted_vec = tf.layers.flatten(attention_weighted_vec)
   # create spatial action mask
-  spatial_action_out = tf.nn.softmax(layers.flatten(spatial_action))
+  spatial_action_out = tf.nn.softmax(layers.flatten(feat_conv_attention))
 
   # Compute non spatial actions and value
-  feat_fc = tf.concat([layers.flatten(mconv1), info_fc], axis=1)
+  feat_fc = tf.concat([layers.flatten(feat_conv_attention), info_fc], axis=1)
   feat_fc = layers.fully_connected(feat_fc,
                                    num_outputs=128,
                                    activation_fn=tf.nn.relu,
@@ -170,7 +163,7 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
 
 
   # num_motion_action = 10
-  global_fc = layers.flatten(mconv2)
+  global_fc = layers.flatten(feat_conv_attention)
 
   motion_action = layers.fully_connected(global_fc, num_outputs=num_action, activation_fn=tf.nn.relu, scope="motion_control_layer")
   mot_mask = np.zeros((num_action), np.float)
