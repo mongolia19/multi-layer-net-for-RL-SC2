@@ -29,6 +29,7 @@ right = 4
 left_down = 5
 down = 6
 right_down = 7
+NO_OP = 8
 
 
 def filter_enemy_hp(hp_map, normal_map, enemy_id):
@@ -297,12 +298,12 @@ def convert_xy_2_eight_direction(x, y, new_x, new_y):
     elif new_x>x and new_x>y:
         return right_down
     else:
-        return right_down
+        return NO_OP
 
 
 class A3CAgent(object):
   """An agent specifically for solving the mini-game maps."""
-  EIGHT_SPATIAL_ACTION = 8
+  EIGHT_SPATIAL_ACTION = 9
   def __init__(self, training, msize, ssize, name='A3C/A3CAgent'):
     self.name = name
     self.training = training

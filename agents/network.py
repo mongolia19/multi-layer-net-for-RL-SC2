@@ -7,6 +7,8 @@ import tensorflow.contrib.layers as layers
 import numpy as np
 from pysc2.lib import features
 
+OUT_PUT_SPATIAL_DIM = 9
+
 
 def build_net(minimap, screen, info, msize, ssize, num_action, ntype):
   if ntype == 'atari':
@@ -136,10 +138,10 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   #                                stride=1,
   #                                activation_fn=None,
   #                                scope='spatial_action')
-  spatial_action = layers.fully_connected(sconv2, 8, activation_fn=tf.nn.relu, scope='spatial_layer')
+  spatial_action = layers.fully_connected(sconv2, OUT_PUT_SPATIAL_DIM, activation_fn=tf.nn.relu, scope='spatial_layer')
   # attention_weighted_vec = spatial_action
   feat_conv_attention = tf.layers.flatten(spatial_action)
-  feat_conv_attention = layers.fully_connected(feat_conv_attention, 8)
+  feat_conv_attention = layers.fully_connected(feat_conv_attention, OUT_PUT_SPATIAL_DIM)
   # att_size = feat_conv_attention.shape[-1].value
   # attention_k = layers.fully_connected(feat_conv_attention,num_outputs=att_size, activation_fn=None, scope='attention_k')
   # with tf.variable_scope('traj_embedding',reuse=tf.AUTO_REUSE) as scope:
