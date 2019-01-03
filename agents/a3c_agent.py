@@ -21,6 +21,15 @@ _SELECT_ARMY = actions.FUNCTIONS.select_army.id
 _NOT_QUEUED = [0]
 _SELECT_ALL = [0]
 
+up_left = 0
+up = 1
+up_right = 2
+left = 3
+right = 4
+left_down = 5
+down = 6
+right_down = 7
+
 
 def filter_enemy_hp(hp_map, normal_map, enemy_id):
     filtered_map = np.zeros(hp_map.shape)
@@ -223,39 +232,48 @@ def get_group_x_y(player_selected):
 
 
 def merge_target_with_position(target, x, y, ssize):
+    mov_step = 5
     # 0 up left ；1 up； 2 up right； 3 left； 4 right；5 left down 6 down 7 right down
-    target_x = 0
-    target_y = 0
-    if target == 0:
-      target_x = x -1
-      target_y = y -1
-    elif target == 1:
+    target_x = x
+    target_y = y
+    if target == up_left:
+      target_x = x - mov_step
+      target_y = y -mov_step
+      print("up left")
+    elif target == up:
       target_x = x
-      target_y = y - 1
-    elif target == 2:
-      target_x = x + 1
-      target_y = y - 1
-    elif target == 3:
-      target_x = x - 1
+      target_y = y - mov_step
+      print("up ")
+    elif target == up_right:
+      target_x = x + mov_step
+      target_y = y + mov_step
+      print("up right")
+    elif target == left:
+      target_x = x - mov_step
       target_y = y
-    elif target == 4:
-      target_x = x + 1
+      print("left")
+    elif target == right:
+      target_x = x + mov_step
       target_y = y
-    elif target == 5:
-      target_x = x - 1
-      target_y = y + 1
-    elif target == 6:
+      print("right")
+    elif target == left_down:
+      target_x = x - mov_step
+      target_y = y + mov_step
+      print("left down")
+    elif target == down:
       target_x = x
-      target_y = y + 1
-    elif target == 7:
-      target_x = x + 1
-      target_y = y + 1
+      target_y = y + mov_step
+      print("down")
+    elif target == right_down:
+      target_x = x + mov_step
+      target_y = y + mov_step
+      print("down right")
     if target_y>=ssize:
       target_y = ssize - 1
     if target_x>=ssize:
       target_x = ssize - 1
     if target_x<0:
-      target_x =0
+      target_x = 0
     if target_y<0:
       target_y = 0
     return target_x, target_y
@@ -263,23 +281,23 @@ def merge_target_with_position(target, x, y, ssize):
 
 def convert_xy_2_eight_direction(x, y, new_x, new_y):
     if new_x<x and new_y<y :
-        return 0
+        return up_left
     elif new_x==x and new_y<y:
-        return 1
+        return up
     elif new_x>x and new_y<y:
-        return 2
+        return up_right
     elif new_x<x and new_y==y:
-        return 3
+        return left
     elif new_x>x and new_y==y:
-        return 4
+        return right
     elif new_x<x and new_y>y:
-        return 5
+        return left_down
     elif new_x==x and new_y>y:
-        return 6
+        return down
     elif new_x>x and new_x>y:
-        return 7
+        return right_down
     else:
-        return 0
+        return right_down
 
 
 class A3CAgent(object):
@@ -374,6 +392,32 @@ class A3CAgent(object):
       self.saver = tf.train.Saver(max_to_keep=100)
 
 
+  def get_enemy_friend_distance(self, obs):
+    _PLAYER_RELATIVE = features.SCREEN_FEATURES.player_relative.index
+    player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
+    _PLAYER_SELECTED = features.SCREEN_FEATURES.selected.index
+    # player_selected = obs.observation["screen"][_PLAYER_SELECTED]
+    # selected_x, selected_y = get_group_x_y(player_selected)
+    player_selected = obs.observation["screen"][_PLAYER_SELECTED]
+    selected_x, selected_y = get_group_x_y(player_selected)
+    # enemy_hp_map = filter_enemy_hp(player_hit_points, player_relative, _PLAYER_HOSTILE)
+    # enemy_y, enemy_x = (player_relative == _PLAYER_HOSTILE).nonzero()
+    enemy_y, enemy_x = (player_relative == _PLAYER_NEUTRAL).nonzero()
+    if enemy_y is None or len(enemy_y)==0:
+        enemy_mean_y = -1
+        enemy_mean_x = -1
+        return 0
+    else:
+        enemy_mean_y = np.mean(enemy_y)
+        enemy_mean_x = np.mean(enemy_x)
+    friend_y, friend_x = (player_relative == _PLAYER_FRIENDLY).nonzero()
+    friend_mean_y = np.mean(friend_y)
+    friend_mean_x = np.mean(friend_x)
+    delta = (friend_mean_y-enemy_mean_y)**2 + (enemy_mean_x-friend_mean_x)**2
+    distance = math.sqrt(delta)
+    return distance
+
+
   def get_hand_crafted_feature(self, obs):
     _PLAYER_HIT = features.SCREEN_FEATURES.unit_hit_points.index
     player_hit_points = obs.observation["screen"][_PLAYER_HIT]
@@ -393,7 +437,7 @@ class A3CAgent(object):
       self.agent_num = 0
     else:
       self.agent_num = self.agent_num + 1
-    current_agent = self.agent_num
+
     if len(enemy_y)>0 and len(enemy_x)>0 and len(friend_x)>0 and len(friend_y)>0:
       hp_vec_enemy = turn_hp_into_vector(enemy_hp_map, selected_x, selected_y)
       vector_enemy_num_8_dim = calulate_enemy_num_distribution(selected_x, selected_y, enemy_x,
@@ -461,9 +505,9 @@ class A3CAgent(object):
     if self.training and np.random.rand() < self.epsilon[0]:
       act_id = np.random.choice(valid_actions)
     if self.training and np.random.rand() < self.epsilon[1]:
-      dy = np.random.randint(-4, 5)
+      dy = np.random.randint(-2, 2)
       target[0] = int(max(0, min(self.ssize-1, target[0]+dy)))
-      dx = np.random.randint(-4, 5)
+      dx = np.random.randint(-2, 2)
       target[1] = int(max(0, min(self.ssize-1, target[1]+dx)))
 
     # Set act_id and act_args
@@ -481,6 +525,7 @@ class A3CAgent(object):
     obs = rbs[-1][-1]
     if obs.last():
       R = 0
+      R_distance = 1/(self.get_enemy_friend_distance(obs) + 0.1)
     else:
       # minimap = np.array(obs.observation['minimap'], dtype=np.float32)
       # minimap = np.expand_dims(U.preprocess_minimap(minimap), axis=0)
@@ -494,6 +539,7 @@ class A3CAgent(object):
               self.screen: screen,
               self.info: info}
       R = self.sess.run(self.value, feed_dict=feed)[0]
+      R_distance = 1/(self.get_enemy_friend_distance(obs) + 0.1)
 
     # Compute targets and masks
     minimaps = []
@@ -501,7 +547,7 @@ class A3CAgent(object):
     infos = []
 
     value_target = np.zeros([len(rbs)], dtype=np.float32)
-    value_target[-1] = R
+    value_target[-1] = R + R_distance
 
     valid_spatial_action = np.zeros([len(rbs)], dtype=np.float32)
     spatial_action_selected = np.zeros([len(rbs), A3CAgent.EIGHT_SPATIAL_ACTION], dtype=np.float32)
@@ -524,7 +570,7 @@ class A3CAgent(object):
       screens.append(screen)
       infos.append(info)
 
-      reward = obs.reward
+      reward = obs.reward + R_distance
       act_id = action.function
       act_args = action.arguments
 
