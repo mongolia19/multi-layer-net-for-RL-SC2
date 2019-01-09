@@ -141,7 +141,7 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   spatial_action = layers.fully_connected(sconv2, OUT_PUT_SPATIAL_DIM, activation_fn=tf.nn.relu, scope='spatial_layer')
   # attention_weighted_vec = spatial_action
   feat_conv_attention = tf.layers.flatten(spatial_action)
-  feat_conv_attention = layers.fully_connected(feat_conv_attention, OUT_PUT_SPATIAL_DIM)
+  feat_conv_attention_out = layers.fully_connected(feat_conv_attention, OUT_PUT_SPATIAL_DIM, scope='feat_conv_out')
   # att_size = feat_conv_attention.shape[-1].value
   # attention_k = layers.fully_connected(feat_conv_attention,num_outputs=att_size, activation_fn=None, scope='attention_k')
   # with tf.variable_scope('traj_embedding',reuse=tf.AUTO_REUSE) as scope:
@@ -153,10 +153,10 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
   #   attention_weighted_vec = tf.matmul(k_q_matrix, attention_v)
   # attention_weighted_vec = tf.layers.flatten(attention_weighted_vec)
   # create spatial action mask
-  spatial_action_out = tf.nn.softmax(layers.flatten(feat_conv_attention))
+  spatial_action_out = tf.nn.softmax(layers.flatten(feat_conv_attention_out))
 
   # Compute non spatial actions and value
-  feat_fc = tf.concat([layers.flatten(feat_conv_attention), info_fc], axis=1)
+  feat_fc = tf.concat([layers.flatten(feat_conv_attention_out), feat_conv_attention, info_fc], axis=1)
   feat_fc = layers.fully_connected(feat_fc,
                                    num_outputs=128,
                                    activation_fn=tf.nn.relu,
@@ -165,14 +165,15 @@ def build_fcn(minimap, screen, info, msize, ssize, num_action):
 
 
   # num_motion_action = 10
-  global_fc = layers.flatten(feat_conv_attention)
+  global_fc = layers.flatten(feat_conv_attention_out)
 
   motion_action = layers.fully_connected(global_fc, num_outputs=num_action, activation_fn=tf.nn.relu, scope="motion_control_layer")
   mot_mask = np.zeros((num_action), np.float)
-  mot_mask[:11] = 1
+  mot_mask[6:11] = 1
+  mot_mask[12:14] = 1
   mot_mask[330:350] = 1
   motion_action_masked = tf.multiply(motion_action, mot_mask)
-  non_spatial_action = tf.nn.softmax(motion_action_masked)
+  non_spatial_action = tf.nn.softmax(motion_action)
   value = tf.reshape(layers.fully_connected(feat_fc,
                                             num_outputs=1,
                                             activation_fn=None,

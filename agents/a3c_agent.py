@@ -247,7 +247,7 @@ def merge_target_with_position(target, x, y, ssize):
       print("up ")
     elif target == up_right:
       target_x = x + mov_step
-      target_y = y + mov_step
+      target_y = y - mov_step
       print("up right")
     elif target == left:
       target_x = x - mov_step
@@ -301,6 +301,17 @@ def convert_xy_2_eight_direction(x, y, new_x, new_y):
         return NO_OP
 
 
+def compute_distance_reward(dist):
+    return (1*100)/(dist + 0.1)
+
+
+def mean_fun(num_list):
+    if num_list is None or len(num_list) == 0:
+        return 0
+    else:
+        return sum(num_list)/len(num_list)
+
+
 class A3CAgent(object):
   """An agent specifically for solving the mini-game maps."""
   EIGHT_SPATIAL_ACTION = 9
@@ -328,7 +339,7 @@ class A3CAgent(object):
 
   def reset(self):
     # Epsilon schedule
-    self.epsilon = [0.05, 0.2]
+    self.epsilon = [0.05, 0.]
 
 
   def build_model(self, reuse, dev, ntype):
@@ -371,6 +382,7 @@ class A3CAgent(object):
       advantage = tf.stop_gradient(self.value_target - self.value)
       policy_loss = - tf.reduce_mean(action_log_prob * advantage)
       value_loss = - tf.reduce_mean(self.value * advantage)
+      # action_ent = tf.reduce_mean(action_log_prob)
       self.summary.append(tf.summary.scalar('policy_loss', policy_loss))
       self.summary.append(tf.summary.scalar('value_loss', value_loss))
 
@@ -402,18 +414,22 @@ class A3CAgent(object):
     player_selected = obs.observation["screen"][_PLAYER_SELECTED]
     selected_x, selected_y = get_group_x_y(player_selected)
     # enemy_hp_map = filter_enemy_hp(player_hit_points, player_relative, _PLAYER_HOSTILE)
-    # enemy_y, enemy_x = (player_relative == _PLAYER_HOSTILE).nonzero()
+    enemy_y, enemy_x = (player_relative == _PLAYER_HOSTILE).nonzero()
     enemy_y, enemy_x = (player_relative == _PLAYER_NEUTRAL).nonzero()
     if enemy_y is None or len(enemy_y)==0:
         enemy_mean_y = -1
         enemy_mean_x = -1
         return 0
     else:
-        enemy_mean_y = np.mean(enemy_y)
-        enemy_mean_x = np.mean(enemy_x)
+        enemy_mean_y = mean_fun(enemy_y)
+        enemy_mean_x = mean_fun(enemy_x)
     friend_y, friend_x = (player_relative == _PLAYER_FRIENDLY).nonzero()
-    friend_mean_y = np.mean(friend_y)
-    friend_mean_x = np.mean(friend_x)
+    if friend_y is None or len(friend_y) == 0 or friend_x is None or len(friend_x) == 0:
+        friend_mean_y = 1000
+        friend_mean_x = 1000
+    else:
+        friend_mean_y = mean_fun(friend_y)
+        friend_mean_x = mean_fun(friend_x)
     delta = (friend_mean_y-enemy_mean_y)**2 + (enemy_mean_x-friend_mean_x)**2
     distance = math.sqrt(delta)
     return distance
@@ -428,7 +444,7 @@ class A3CAgent(object):
     player_selected = obs.observation["screen"][_PLAYER_SELECTED]
     selected_x, selected_y = get_group_x_y(player_selected)
     enemy_hp_map = filter_enemy_hp(player_hit_points, player_relative, _PLAYER_HOSTILE)
-    # enemy_y, enemy_x = (player_relative == _PLAYER_HOSTILE).nonzero()
+    enemy_y, enemy_x = (player_relative == _PLAYER_HOSTILE).nonzero()
     enemy_y, enemy_x = (player_relative == _PLAYER_NEUTRAL).nonzero()
     friend_y, friend_x = (player_relative == _PLAYER_FRIENDLY).nonzero()
     if len(friend_x) != len(friend_y):
@@ -491,15 +507,17 @@ class A3CAgent(object):
     non_spatial_action = non_spatial_action.ravel()
     spatial_action = spatial_action.ravel()
     valid_actions = obs.observation['available_actions']
+    valid_actions = [ind for ind in valid_actions if ind == 7 or ind == 331]
     act_id = valid_actions[np.argmax(non_spatial_action[valid_actions])]
     target = np.argmax(spatial_action)
     x = minimap[0][0]
     y = minimap[0][1]
+    print('y, x ', y, x)
     next_y, next_x = merge_target_with_position(target, x, y, self.ssize)
     # target = [int(target // self.ssize), int(target % self.ssize)]
-    target = [next_y, next_x]
+    target = [next_x, next_y]
 
-    if False:
+    if True:
       print(actions.FUNCTIONS[act_id].name, target)
 
     # Epsilon greedy exploration
@@ -526,7 +544,8 @@ class A3CAgent(object):
     obs = rbs[-1][-1]
     if obs.last():
       R = 0
-      R_distance = 1/(self.get_enemy_friend_distance(obs) + 0.1)
+      # R_distance_reward = 0
+      R_distance_reward = compute_distance_reward(self.get_enemy_friend_distance(obs))
     else:
       # minimap = np.array(obs.observation['minimap'], dtype=np.float32)
       # minimap = np.expand_dims(U.preprocess_minimap(minimap), axis=0)
@@ -540,15 +559,16 @@ class A3CAgent(object):
               self.screen: screen,
               self.info: info}
       R = self.sess.run(self.value, feed_dict=feed)[0]
-      R_distance = 1/(self.get_enemy_friend_distance(obs) + 0.1)
+      R_distance_reward = compute_distance_reward(self.get_enemy_friend_distance(obs))
 
+    Tot_reward = R + R_distance_reward
     # Compute targets and masks
     minimaps = []
     screens = []
     infos = []
 
     value_target = np.zeros([len(rbs)], dtype=np.float32)
-    value_target[-1] = R + R_distance
+    value_target[-1] = Tot_reward
 
     valid_spatial_action = np.zeros([len(rbs)], dtype=np.float32)
     spatial_action_selected = np.zeros([len(rbs), A3CAgent.EIGHT_SPATIAL_ACTION], dtype=np.float32)
@@ -571,11 +591,14 @@ class A3CAgent(object):
       screens.append(screen)
       infos.append(info)
 
-      reward = obs.reward + R_distance
+      reward = obs.reward
+      tmp_distance_reward = compute_distance_reward(self.get_enemy_friend_distance(obs))
+      tmp_tot_reward = reward + tmp_distance_reward
       act_id = action.function
       act_args = action.arguments
 
-      value_target[i] = reward + disc * value_target[i-1]
+      value_target[i] = tmp_tot_reward
+      # value_target[i] = tmp_tot_reward + disc * value_target[i-1]
 
       valid_actions = obs.observation["available_actions"]
       valid_non_spatial_action[i, valid_actions] = 1
